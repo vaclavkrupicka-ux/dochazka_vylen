@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#10161d">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<title>Docházka VYLEN</title>
+<style>
+  :root { --bg:#10161d; --panel:#1a232d; --line:#2c3946; --ink:#eef2f5; --muted:#8fa0b1; --accent:#e3a43c; --ok:#3fae6b; --warn:#e3a43c; --err:#d9534f; }
+  * { box-sizing:border-box }
+  html,body { height:100%; margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  body { display:grid; grid-template-rows:auto 1fr auto; padding:max(20px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left)); gap:16px; user-select:none; -webkit-user-select:none }
+  header { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap }
+  .firma { font-weight:800; font-size:22px; letter-spacing:.02em; cursor:default }
+  .firma span { color:var(--accent) }
+  .datum { color:var(--muted); font-size:20px }
+  main { display:grid; place-items:center; align-content:center; text-align:center; gap:14px }
+  .hodiny { font-size:clamp(64px,16vw,160px); font-weight:700; font-variant-numeric:tabular-nums; line-height:1 }
+  .vyzva { font-size:clamp(22px,4vw,34px); color:var(--muted) }
+  .vysledek { font-size:clamp(28px,6vw,54px); font-weight:700; padding:18px 28px; border-radius:14px }
+  .vysledek.ok { background:#163a26; color:#c9f2d8 }
+  .vysledek.warn { background:#3a2d14; color:#ffe2ad }
+  .vysledek.err { background:#3f1d1b; color:#ffd6d4 }
+  .vysledek small { display:block; font-size:.48em; font-weight:500; margin-top:6px }
+  .typy { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px }
+  .typy button { font:600 20px system-ui,sans-serif; padding:22px 10px; border-radius:12px; border:2px solid var(--line); background:var(--panel); color:var(--ink); cursor:pointer }
+  .typy button[aria-pressed="true"] { border-color:var(--accent); background:#3a2d14; color:#ffe2ad }
+  .stav { display:flex; justify-content:space-between; gap:12px; color:var(--muted); font-size:14px; margin-top:10px; flex-wrap:wrap }
+  .tecka { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--muted); margin-right:6px; vertical-align:middle }
+  .tecka.ok { background:var(--ok) } .tecka.warn { background:var(--warn) } .tecka.err { background:var(--err) }
+  #vstup { position:absolute; left:-9999px; top:0; opacity:0; width:1px; height:1px }
+  /* nastavení */
+  #nastaveni { position:fixed; inset:0; background:var(--bg); display:grid; place-items:center; padding:20px; z-index:5; overflow:auto }
+  #nastaveni form { width:min(560px,100%); display:grid; gap:14px; background:var(--panel); padding:22px; border-radius:14px; border:1px solid var(--line) }
+  #nastaveni h1 { margin:0; font-size:22px }
+  #nastaveni label { display:grid; gap:6px; font-size:14px; color:var(--muted) }
+  #nastaveni input { font:16px system-ui,sans-serif; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); user-select:text; -webkit-user-select:text }
+  #nastaveni .radek { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end }
+  #nastaveni button { font:600 16px system-ui,sans-serif; padding:10px 16px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#1b1306; cursor:pointer }
+  #nastaveni button.vedl { background:transparent; color:var(--ink); border-color:var(--line) }
+  #nastaveni .info { font-size:13px; color:var(--muted); margin:0 }
+  #nastaveni .vysl { font-size:14px; min-height:1.2em; margin:0 }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px }
+</style>
+</head>
+<body>
+  <header>
+    <div class="firma" id="logo">VYLEN <span>docházka</span></div>
+    <div class="datum" id="datum"></div>
+  </header>
+  <main>
+    <div class="hodiny" id="hodiny">--:--</div>
+    <div class="vyzva" id="vyzva">Přilož čip</div>
+    <div class="vysledek" id="vysledek" hidden></div>
+  </main>
+  <footer>
+    <div class="typy" id="typy">
+      <button type="button" data-typ="auto" aria-pressed="true">Příchod / Odchod</button>
+      <button type="button" data-typ="Lékař" aria-pressed="false">Lékař</button>
+      <button type="button" data-typ="Služební cesta" aria-pressed="false">Služební cesta</button>
+    </div>
+    <div class="stav"><span id="spojeni"><span class="tecka" id="tecka"></span><span id="spojeniText">Spojuji…</span></span><span id="fronta"></span></div>
+  </footer>
+  <input id="vstup" autocomplete="off" inputmode="none" aria-label="Čtečka čipů">
+
+  <div id="nastaveni" hidden>
+    <form id="formNast">
+      <h1>Nastavení terminálu</h1>
+      <p class="info">Adresu a klíč najdeš v Google Tabulce: menu Docházka → Zobrazit klíč terminálu. Adresa je odkaz webové aplikace končící /exec.</p>
+      <label>Adresa webové aplikace<input id="nUrl" type="url" required placeholder="https://script.google.com/macros/s/…/exec"></label>
+      <label>Klíč terminálu<input id="nKlic" required autocomplete="off"></label>
+      <label>Název terminálu (např. Dílna, Kancelář)<input id="nNazev" required maxlength="30"></label>
+      <p class="vysl" id="nVysl"></p>
+      <div class="radek">
+        <button type="button" class="vedl" id="nZavrit">Zavřít</button>
+        <button type="button" class="vedl" id="nTest">Vyzkoušet spojení</button>
+        <button type="submit">Uložit</button>
+      </div>
+      <p class="info" id="nFronta"></p>
+    </form>
+  </div>
+
+<script>
+'use strict';
+const K_CFG = 'vylen_dochazka_cfg', K_FRONTA = 'vylen_dochazka_fronta', K_ZAM = 'vylen_dochazka_zam', K_STAV = 'vylen_dochazka_stav';
+const $ = id => document.getElementById(id);
+const nacti = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (_) { return def; } };
+const uloz = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (_) { return false; } };
+
+let cfg = nacti(K_CFG, null);
+let typ = 'auto', typTimer = null, zobrazTimer = null, odesilam = false, posledniSpojeni = 0;
+
+/* ---------- hodiny ---------- */
+function tick() {
+  const d = new Date();
+  $('hodiny').textContent = d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+  $('datum').textContent = d.toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+setInterval(tick, 1000); tick();
+
+/* ---------- volba typu ---------- */
+$('typy').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  nastavTyp(b.dataset.typ); fokus();
+});
+function nastavTyp(t) {
+  typ = t;
+  document.querySelectorAll('#typy button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.typ === t)));
+  $('vyzva').textContent = t === 'auto' ? 'Přilož čip' : 'Přilož čip – ' + t.toLowerCase();
+  clearTimeout(typTimer);
+  if (t !== 'auto') typTimer = setTimeout(() => nastavTyp('auto'), 15000);
+}
+
+/* ---------- čtečka = klávesnice (číslo + Enter) ---------- */
+const vstup = $('vstup');
+function fokus() { if ($('nastaveni').hidden && document.activeElement !== vstup) vstup.focus({ preventScroll: true }); }
+setInterval(fokus, 1000); document.addEventListener('click', fokus);
+vstup.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const cip = vstup.value.trim().replace(/^0+(?=\d)/, ''); vstup.value = '';
+    if (cip.length >= 4) pipnuti(cip);
+  }
+});
+
+/* ---------- zápis pípnutí ---------- */
+function novId() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) + '-' + (cfg ? cfg.nazev : 'x'); }
+
+function pipnuti(cip) {
+  if (!cfg) { otevriNastaveni(); return; }
+  // omylem dvakrát přiložený čip do 60 s se ignoruje
+  const predchozi = nacti(K_STAV, {})[cip];
+  if (predchozi && Date.now() - predchozi.ts < 60000 && (typ === 'auto' || predchozi.typ === typ)) {
+    const z = (nacti(K_ZAM, { seznam: [] }).seznam || []).find(x => x.cip === cip);
+    zobraz(z ? z.jmeno : 'Už zapsáno', predchozi.typ + ' ' + hm(predchozi.ts) + ' už je zapsaný', 'ok');
+    nastavTyp('auto'); return;
+  }
+  const p = { id: novId(), cip, typ, ts: Date.now() };
+  const f = nacti(K_FRONTA, []); f.push(p);
+  if (!uloz(K_FRONTA, f)) { zobraz('Chyba úložiště', 'Pípnutí se neuložilo, nahlas to v kanceláři', 'err'); return; }
+  pip(880);
+  // okamžitá odezva podle offline seznamu zaměstnanců
+  const zam = (nacti(K_ZAM, { seznam: [] }).seznam || []).find(z => z.cip === cip);
+  const odhad = odhadTypu(cip, p.typ, p.ts);
+  if (zam) zobraz(zam.jmeno, odhad + ' ' + hm(p.ts), 'ok');
+  else zobraz('Zapisuji…', '', 'warn');
+  nastavTyp('auto');
+  odesli(p.id);
+}
+
+// lokální odhad typu (jen pro zobrazení; o skutečném typu rozhoduje server, který vidí oba terminály)
+function odhadTypu(cip, t, ts) {
+  const stav = nacti(K_STAV, {});
+  let vysl = t;
+  if (t === 'auto') {
+    const posl = stav[cip];
+    vysl = (posl && posl.typ !== 'Odchod' && ts - posl.ts < 16 * 3600000) ? 'Odchod' : 'Příchod';
+  }
+  stav[cip] = { typ: vysl, ts }; uloz(K_STAV, stav);
+  return vysl;
+}
+
+async function odesli(cekamNaId) {
+  if (odesilam || !cfg) return;
+  const fronta = nacti(K_FRONTA, []);
+  aktualizujStav();
+  if (!fronta.length) return;
+  odesilam = true;
+  const davka = fronta.slice(0, 50);
+  try {
+    const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), 15000);
+    const res = await fetch(cfg.url, {
+      method: 'POST', redirect: 'follow', signal: ctrl.signal,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ k: cfg.klic, terminal: cfg.nazev, pipnuti: davka })
+    });
+    clearTimeout(tm);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.chyba === 'klic' ? 'Neplatný klíč terminálu' : 'Chyba serveru');
+    const hotova = new Set(data.vysledky.map(v => v.id));
+    uloz(K_FRONTA, nacti(K_FRONTA, []).filter(x => !hotova.has(x.id)));
+    posledniSpojeni = Date.now();
+    data.vysledky.forEach(v => {
+      if (v.id !== cekamNaId) return;
+      if (v.neznamy) { zobraz('Neznámý čip', 'Kód ' + v.cip + ' – nahlas ho v kanceláři', 'err'); pip(220); setTimeout(() => pip(220), 200); }
+      else if (v.ok && v.jmeno) {
+        zobraz(v.jmeno, v.typ + ' ' + v.cas + (v.duplicita ? ' (už zapsáno)' : ''), 'ok');
+        const st = nacti(K_STAV, {}); const c = davka.find(x => x.id === v.id); if (c) { st[c.cip] = { typ: v.typ, ts: c.ts }; uloz(K_STAV, st); }
+      }
+    });
+    odesilam = false;
+    if (nacti(K_FRONTA, []).length) setTimeout(() => odesli(), 500);
+  } catch (err) {
+    odesilam = false;
+    if (cekamNaId) {
+      const v = $('vysledek');
+      if (!v.hidden && v.querySelector('small')) v.querySelector('small').textContent += ' · uloženo, odešle se';
+      else zobraz('Uloženo v terminálu', 'Odešle se, až bude internet', 'warn');
+    }
+    if (String(err.message).includes('klíč')) zobraz('Chyba nastavení', 'Neplatný klíč terminálu', 'err');
+  }
+  aktualizujStav();
+}
+
+function aktualizujStav() {
+  const n = nacti(K_FRONTA, []).length;
+  const online = posledniSpojeni && Date.now() - posledniSpojeni < 6 * 60000;
+  $('tecka').className = 'tecka ' + (!cfg ? 'err' : online ? (n ? 'warn' : 'ok') : 'warn');
+  $('spojeniText').textContent = !cfg ? 'Terminál není nastavený' : online ? 'Online · ' + (cfg.nazev || '') : 'Bez spojení – pípnutí se ukládají v terminálu';
+  $('fronta').textContent = n ? 'Čeká na odeslání: ' + n : '';
+}
+
+/* ---------- seznam zaměstnanců pro offline režim ---------- */
+async function stahniZamestnance() {
+  if (!cfg) return;
+  try {
+    const res = await fetch(cfg.url + (cfg.url.includes('?') ? '&' : '?') + 'akce=zamestnanci&k=' + encodeURIComponent(cfg.klic), { redirect: 'follow' });
+    const d = await res.json();
+    if (d.ok) { uloz(K_ZAM, { seznam: d.zamestnanci, cas: d.cas }); posledniSpojeni = Date.now(); }
+  } catch (_) {}
+  aktualizujStav();
+}
+
+/* ---------- zobrazení ---------- */
+function hm(ms) { return new Date(ms).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }); }
+function zobraz(hlavni, vedlejsi, trida) {
+  const v = $('vysledek');
+  v.hidden = false; v.className = 'vysledek ' + (trida || '');
+  v.textContent = hlavni;
+  if (vedlejsi) { const s = document.createElement('small'); s.textContent = vedlejsi; v.appendChild(s); }
+  clearTimeout(zobrazTimer); zobrazTimer = setTimeout(() => { v.hidden = true; }, 4500);
+}
+let audio = null;
+function pip(f) {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.frequency.value = f; g.gain.value = 0.15; o.connect(g); g.connect(audio.destination);
+    o.start(); o.stop(audio.currentTime + 0.15);
+  } catch (_) {}
+}
+
+/* ---------- nastavení: 5× ťukni na logo ---------- */
+let tuky = 0, tukTimer = null;
+$('logo').addEventListener('click', () => { tuky++; clearTimeout(tukTimer); tukTimer = setTimeout(() => tuky = 0, 2000); if (tuky >= 5) { tuky = 0; otevriNastaveni(); } });
+function otevriNastaveni() {
+  $('nUrl').value = cfg ? cfg.url : ''; $('nKlic').value = cfg ? cfg.klic : ''; $('nNazev').value = cfg ? cfg.nazev : '';
+  $('nVysl').textContent = ''; $('nFronta').textContent = 'Neodeslaných pípnutí v terminálu: ' + nacti(K_FRONTA, []).length;
+  $('nZavrit').hidden = !cfg; $('nastaveni').hidden = false;
+}
+$('nZavrit').addEventListener('click', () => { $('nastaveni').hidden = true; fokus(); });
+$('nTest').addEventListener('click', async () => {
+  $('nVysl').textContent = 'Zkouším…';
+  try {
+    const u = $('nUrl').value.trim();
+    const res = await fetch(u + (u.includes('?') ? '&' : '?') + 'akce=zamestnanci&k=' + encodeURIComponent($('nKlic').value.trim()), { redirect: 'follow' });
+    const d = await res.json();
+    $('nVysl').textContent = d.ok ? 'Spojení funguje. Zaměstnanců v seznamu: ' + d.zamestnanci.length : 'Server odpověděl, ale klíč nesedí.';
+  } catch (e) { $('nVysl').textContent = 'Spojení se nepovedlo. Zkontroluj adresu (musí končit /exec) a internet.'; }
+});
+$('formNast').addEventListener('submit', e => {
+  e.preventDefault();
+  cfg = { url: $('nUrl').value.trim(), klic: $('nKlic').value.trim(), nazev: $('nNazev').value.trim() };
+  uloz(K_CFG, cfg); $('nastaveni').hidden = true;
+  stahniZamestnance(); odesli(); fokus();
+});
+
+/* ---------- start ---------- */
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+async function drzObrazovku() { try { if ('wakeLock' in navigator && document.visibilityState === 'visible') await navigator.wakeLock.request('screen'); } catch (_) {} }
+document.addEventListener('visibilitychange', drzObrazovku); drzObrazovku();
+window.addEventListener('online', () => odesli());
+setInterval(() => odesli(), 30000);
+setInterval(stahniZamestnance, 15 * 60000);
+if (!cfg) otevriNastaveni(); else { stahniZamestnance(); odesli(); }
+aktualizujStav(); fokus();
+</script>
+</body>
+</html>
