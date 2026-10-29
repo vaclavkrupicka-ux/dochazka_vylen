@@ -120,7 +120,8 @@ setInterval(fokus, 1000); document.addEventListener('click', fokus);
 vstup.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    const cip = vstup.value.trim().replace(/^0+(?=\d)/, ''); vstup.value = '';
+    const CZ = { '+':'1','ě':'2','š':'3','č':'4','ř':'5','ž':'6','ý':'7','á':'8','í':'9','é':'0' };
+  const cip = vstup.value.trim().toLowerCase().replace(/[+ěščřžýáíé]/g, c => CZ[c]).replace(/^0+(?=\d)/, ''); vstup.value = '';
     if (cip.length >= 4) pipnuti(cip);
   }
 });
